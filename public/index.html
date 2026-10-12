@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>opencode 提供商添加工具</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">oc</span>
+      <div>
+        <h1>提供商添加工具</h1>
+        <p class="sub">为 opencode 拉取模型并一键写入配置</p>
+      </div>
+    </div>
+    <div class="config-path" id="configPath">加载中…</div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="fetch">拉取模型</button>
+    <button class="tab" data-tab="providers">已有配置</button>
+    <button class="tab" data-tab="backups">备份</button>
+    <button class="tab" data-tab="settings">设置</button>
+  </nav>
+
+  <main class="layout">
+    <section class="panel active" id="panel-fetch">
+      <div class="card">
+        <h2><span class="step">1</span> 连接信息</h2>
+        <div class="grid">
+          <label class="field span-2">
+            <span>API 地址 (baseURL)</span>
+            <input id="baseURL" type="text" placeholder="https://api.example.com/v1" spellcheck="false" />
+          </label>
+          <label class="field span-2">
+            <span>API Key</span>
+            <input id="apiKey" type="password" placeholder="sk-..." spellcheck="false" />
+          </label>
+        </div>
+        <details class="advanced">
+          <summary>高级选项（自定义请求头 / 认证方式）</summary>
+          <div class="grid">
+            <label class="field">
+              <span>认证头名称</span>
+              <input id="headerName" type="text" placeholder="Authorization" spellcheck="false" />
+            </label>
+            <label class="field">
+              <span>认证头取值</span>
+              <input id="headerValue" type="text" placeholder="Bearer sk-... 或直接填 key" spellcheck="false" />
+            </label>
+            <label class="field span-2">
+              <span>额外请求头 (JSON)</span>
+              <textarea id="extraHeaders" rows="2" placeholder='{"User-Agent": "MyClient"}' spellcheck="false"></textarea>
+            </label>
+          </div>
+        </details>
+        <div class="row">
+          <button id="fetchBtn" class="btn primary">拉取模型</button>
+          <button id="testBtn" class="btn">测试连通性 / 校验 Key</button>
+          <span id="fetchStatus" class="status"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="step">2</span> 选择模型</h2>
+        <div class="row between">
+          <input id="modelSearch" class="search" type="text" placeholder="搜索模型…" spellcheck="false" />
+          <div class="row tight">
+            <button id="selectAll" class="btn ghost">全选</button>
+            <button id="selectNone" class="btn ghost">清空</button>
+            <span id="modelCount" class="status">0 个模型</span>
+          </div>
+        </div>
+        <div id="modelList" class="model-list">
+          <div class="empty">尚未拉取模型</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="step">3</span> 提供商设置</h2>
+        <div class="grid">
+          <label class="field">
+            <span>提供商 ID</span>
+            <input id="providerId" type="text" placeholder="myprovider" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span>显示名称（可选）</span>
+            <input id="providerName" type="text" placeholder="默认与 ID 相同" spellcheck="false" />
+          </label>
+          <label class="field span-2">
+            <span>npm 包</span>
+            <input id="npm" type="text" value="@ai-sdk/openai-compatible" spellcheck="false" />
+          </label>
+          <label class="field checkbox span-2">
+            <input id="enable" type="checkbox" checked />
+            <span>添加到配置时自动启用（从 disabled_providers 移除）</span>
+          </label>
+          <label class="field checkbox span-2">
+            <input id="modeReplace" type="checkbox" />
+            <span>完全替换模型列表（删除未勾选的已有模型；默认合并保留）</span>
+          </label>
+        </div>
+        <div class="row">
+          <button id="addBtn" class="btn primary">一键添加</button>
+          <button id="resetEditBtn" class="btn ghost" hidden>取消编辑</button>
+          <span id="addStatus" class="status"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-providers">
+      <div class="card">
+        <div class="row between">
+          <h2>已有提供商</h2>
+          <button id="refreshProviders" class="btn ghost">刷新</button>
+        </div>
+        <div id="providerList" class="provider-list">
+          <div class="empty">加载中…</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-backups">
+      <div class="card">
+        <div class="row between">
+          <h2>备份管理</h2>
+          <div class="row tight">
+            <button id="backupNow" class="btn primary">立即备份</button>
+            <button id="refreshBackups" class="btn ghost">刷新</button>
+          </div>
+        </div>
+        <p class="hint" id="autoBackupHint"></p>
+        <div id="backupList" class="backup-list">
+          <div class="empty">暂无备份</div>
+        </div>
+        <div class="pager" id="backupPager" hidden>
+          <button id="prevPage" class="btn ghost small">上一页</button>
+          <span id="pageInfo" class="status"></span>
+          <button id="nextPage" class="btn ghost small">下一页</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-settings">
+      <div class="card">
+        <h2>设置</h2>
+        <label class="field checkbox span-2">
+          <input id="setAutoBackup" type="checkbox" />
+          <span>开启自动备份（每次写入配置前自动生成备份）</span>
+        </label>
+        <label class="field" style="max-width:220px">
+          <span>备份每页条数</span>
+          <input id="setPageSize" type="number" min="1" max="100" value="10" spellcheck="false" />
+        </label>
+        <div class="row">
+          <button id="saveSettings" class="btn primary">保存设置</button>
+          <span id="settingsStatus" class="status"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>路径信息</h2>
+        <div class="info-row"><span class="info-label">配置文件</span><code id="infoConfig">-</code></div>
+        <div class="info-row"><span class="info-label">备份目录</span><code id="infoBackup">-</code></div>
+        <div class="info-row"><span class="info-label">设置文件</span><code id="infoSettings">-</code></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

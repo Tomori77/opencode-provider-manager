@@ -1,0 +1,22 @@
+{
+  "name": "opencode-provider-manager",
+  "version": "1.0.0",
+  "description": "本地 Web 工具：为 opencode 拉取模型、一键添加/编辑提供商配置，并带备份与恢复",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "opencode",
+    "provider",
+    "openai-compatible",
+    "ai-sdk",
+    "llm",
+    "config"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
