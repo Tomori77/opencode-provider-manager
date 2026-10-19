@@ -2,6 +2,7 @@ const $ = (id) => document.getElementById(id);
 
 let allModels = [];
 let selected = new Set();
+let caps = {};
 let editingId = null;
 let backupPage = 1;
 let pageSize = 10;
@@ -61,6 +62,15 @@ function switchTab(name) {
   if (name === 'backups') loadBackups(backupPage);
 }
 
+function defaultCaps() {
+  return { attachment: false, reasoning: false, tool_call: true, temperature: undefined };
+}
+
+function ensureCaps(id) {
+  if (!caps[id]) caps[id] = defaultCaps();
+  return caps[id];
+}
+
 function renderModels() {
   const list = $('modelList');
   const q = $('modelSearch').value.trim().toLowerCase();
@@ -74,19 +84,35 @@ function renderModels() {
     list.innerHTML = '<div class="empty">没有匹配的模型</div>';
   } else {
     list.innerHTML = shown
-      .map(
-        (m) => `<label class="model-item">
-          <input type="checkbox" data-model="${escapeAttr(m)}" ${selected.has(m) ? 'checked' : ''} />
-          <span class="mid">${escapeHtml(m)}</span>
-        </label>`
-      )
+      .map((m) => {
+        const c = ensureCaps(m);
+        const cap = (key, label, title) =>
+          `<label class="cap" title="${title}"><input type="checkbox" data-cap="${key}" data-model="${escapeAttr(m)}" ${c[key] ? 'checked' : ''}/>${label}</label>`;
+        return `<div class="model-item">
+          <label class="model-pick">
+            <input type="checkbox" data-model="${escapeAttr(m)}" ${selected.has(m) ? 'checked' : ''} />
+            <span class="mid">${escapeHtml(m)}</span>
+          </label>
+          <span class="caps">
+            ${cap('attachment', '视觉', '支持图片/附件（多模态）')}
+            ${cap('reasoning', '推理', '支持推理/思考')}
+            ${cap('tool_call', '工具', '支持工具调用')}
+          </span>
+        </div>`;
+      })
       .join('');
-    list.querySelectorAll('input[data-model]').forEach((cb) => {
+    list.querySelectorAll('input[data-model]:not([data-cap])').forEach((cb) => {
       cb.addEventListener('change', () => {
         const id = cb.getAttribute('data-model');
         if (cb.checked) selected.add(id);
         else selected.delete(id);
         updateCount();
+      });
+    });
+    list.querySelectorAll('input[data-cap]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const id = cb.getAttribute('data-model');
+        ensureCaps(id)[cb.getAttribute('data-cap')] = cb.checked;
       });
     });
   }
@@ -125,6 +151,8 @@ async function fetchModels() {
     });
     allModels = data.models;
     selected = new Set(allModels);
+    caps = {};
+    for (const m of allModels) caps[m] = defaultCaps();
     if (!$('providerId').value.trim()) $('providerId').value = hostFromURL(baseURL);
     renderModels();
     setStatus($('fetchStatus'), `成功：从 ${data.url} 拉取到 ${data.models.length} 个模型`, 'ok');
@@ -204,13 +232,16 @@ async function reloadProvider(id) {
     switchTab('fetch');
     await fetchModels();
     const existing = new Set(d.models);
-    if (allModels.length) {
+    for (const [mid, meta] of Object.entries(d.modelMeta || {})) {
+      if (caps[mid]) Object.assign(caps[mid], meta);
+    }
+    if (allModels.length || d.models.length) {
       selected = new Set(allModels.filter((m) => existing.has(m)));
       renderModels();
     }
-    const missing = d.models.filter((m) => !allModels.includes(m));
+    const missingModels = d.models.filter((m) => !allModels.includes(m));
     const kept = d.models.filter((m) => allModels.includes(m)).length;
-    setStatus($('addStatus'), `正在编辑 ${id}：已勾选配置中的 ${kept} 个模型` + (missing.length ? `，另有 ${missing.length} 个配置模型未出现在接口列表中（合并模式会保留）` : ''), 'ok');
+    setStatus($('addStatus'), `正在编辑 ${id}：已勾选配置中的 ${kept} 个模型` + (missingModels.length ? `，另有 ${missingModels.length} 个配置模型未出现在接口列表中（合并模式会保留）` : ''), 'ok');
   } catch (e) {
     toast(e.message, 'err');
   }
@@ -262,7 +293,13 @@ async function addProvider() {
         baseURL,
         apiKey: $('apiKey').value.trim(),
         headers,
-        models: chosen.map((m) => ({ id: m, name: m })),
+        models: chosen.map((m) => {
+          const c = ensureCaps(m);
+          const item = { id: m, name: m, attachment: c.attachment === true, reasoning: c.reasoning === true, tool_call: c.tool_call !== false };
+          if (typeof c.temperature === 'boolean') item.temperature = c.temperature;
+          if (c.modalities && typeof c.modalities === 'object') item.modalities = c.modalities;
+          return item;
+        }),
         enable: $('enable').checked,
         mode: $('modeReplace').checked ? 'replace' : 'merge'
       }

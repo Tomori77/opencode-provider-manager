@@ -456,7 +456,15 @@ function addProvider(body) {
     const mid = String(m.id || '').trim();
     if (!mid) continue;
     const mname = m.name && String(m.name).trim() ? String(m.name).trim() : mid;
-    modelMap[mid] = { name: mname };
+    const prev = modelMap[mid] && typeof modelMap[mid] === 'object' ? modelMap[mid] : {};
+    const next = Object.assign({}, prev, { name: mname });
+    for (const key of ['attachment', 'reasoning', 'tool_call', 'temperature']) {
+      if (typeof m[key] === 'boolean') next[key] = m[key];
+    }
+    if (m.modalities && typeof m.modalities === 'object') next.modalities = m.modalities;
+    if (m.limit && typeof m.limit === 'object') next.limit = m.limit;
+    if (m.cost && typeof m.cost === 'object') next.cost = m.cost;
+    modelMap[mid] = next;
   }
 
   const options = { baseURL: String(body.baseURL).trim().replace(/\/+$/, '') };
@@ -496,6 +504,19 @@ function getProviderDetail(body) {
   const p = config.provider && config.provider[id];
   if (!p) throw httpError(404, '提供商不存在: ' + id);
   const disabled = new Set(Array.isArray(config.disabled_providers) ? config.disabled_providers : []);
+  const modelMeta = {};
+  if (p.models && typeof p.models === 'object') {
+    for (const [mid, mv] of Object.entries(p.models)) {
+      const m = mv && typeof mv === 'object' ? mv : {};
+      modelMeta[mid] = {
+        attachment: m.attachment === true,
+        reasoning: m.reasoning === true,
+        tool_call: typeof m.tool_call === 'boolean' ? m.tool_call : true,
+        temperature: typeof m.temperature === 'boolean' ? m.temperature : undefined,
+        modalities: m.modalities && typeof m.modalities === 'object' ? m.modalities : undefined
+      };
+    }
+  }
   return {
     id,
     name: p.name || id,
@@ -504,6 +525,7 @@ function getProviderDetail(body) {
     apiKey: (p.options && p.options.apiKey) || '',
     headers: (p.options && p.options.headers) || {},
     models: p.models && typeof p.models === 'object' ? Object.keys(p.models) : [],
+    modelMeta,
     disabled: disabled.has(id)
   };
 }
