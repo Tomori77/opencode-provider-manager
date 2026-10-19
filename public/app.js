@@ -63,12 +63,21 @@ function switchTab(name) {
 }
 
 function defaultCaps() {
-  return { attachment: false, reasoning: false, tool_call: true, temperature: undefined };
+  return { attachment: false, reasoning: false, tool_call: true, temperature: undefined, modalities: { input: ['text'] } };
 }
 
 function ensureCaps(id) {
   if (!caps[id]) caps[id] = defaultCaps();
   return caps[id];
+}
+
+function modalitiesFor(c) {
+  let input = Array.isArray(c.modalities && c.modalities.input) ? c.modalities.input.slice() : ['text'];
+  if (!input.includes('text')) input.unshift('text');
+  const hasImage = input.includes('image');
+  if (c.attachment && !hasImage) input.push('image');
+  if (!c.attachment && hasImage) input = input.filter((x) => x !== 'image');
+  return { input };
 }
 
 function renderModels() {
@@ -233,7 +242,12 @@ async function reloadProvider(id) {
     await fetchModels();
     const existing = new Set(d.models);
     for (const [mid, meta] of Object.entries(d.modelMeta || {})) {
-      if (caps[mid]) Object.assign(caps[mid], meta);
+      if (!caps[mid]) continue;
+      const metaInput = meta.modalities && Array.isArray(meta.modalities.input) ? meta.modalities.input : null;
+      caps[mid].attachment = meta.attachment === true || !!(metaInput && metaInput.includes('image'));
+      caps[mid].reasoning = meta.reasoning === true;
+      caps[mid].tool_call = meta.tool_call !== false;
+      if (metaInput) caps[mid].modalities = { input: metaInput };
     }
     if (allModels.length || d.models.length) {
       selected = new Set(allModels.filter((m) => existing.has(m)));
@@ -295,9 +309,8 @@ async function addProvider() {
         headers,
         models: chosen.map((m) => {
           const c = ensureCaps(m);
-          const item = { id: m, name: m, attachment: c.attachment === true, reasoning: c.reasoning === true, tool_call: c.tool_call !== false };
+          const item = { id: m, name: m, attachment: c.attachment === true, reasoning: c.reasoning === true, tool_call: c.tool_call !== false, modalities: modalitiesFor(c) };
           if (typeof c.temperature === 'boolean') item.temperature = c.temperature;
-          if (c.modalities && typeof c.modalities === 'object') item.modalities = c.modalities;
           return item;
         }),
         enable: $('enable').checked,
